@@ -1,0 +1,36 @@
+services:
+  grampsweb: &grampsweb
+    image: ghcr.io/gramps-project/grampsweb:latest
+    restart: always
+    ports:
+      - ${APP_PORT}:5000 
+    environment:
+      GRAMPSWEB_TREE: "Gramps Web"  # will create a new tree if not exists
+      GRAMPSWEB_BASE_URL: "http://localhost"  # the address Gramps Web is reached at, used in links in e-mails
+      GRAMPSWEB_CELERY_CONFIG__broker_url: "redis://grampsweb_redis:6379/0"
+      GRAMPSWEB_CELERY_CONFIG__result_backend: "redis://grampsweb_redis:6379/0"
+      GRAMPSWEB_RATELIMIT_STORAGE_URI: redis://grampsweb_redis:6379/1
+      # GUNICORN_NUM_WORKERS: 8 # optional variable, each worker increases efficiency, but takes resources (CPU and RAM)
+    depends_on:
+      - grampsweb_redis
+    volumes:
+      - ${DATA_ROOT}/users:/app/users  # persist user database
+      - ${DATA_ROOT}/index:/app/indexdir  # persist search index
+      - ${DATA_ROOT}/thumb_cache:/app/thumbnail_cache  # persist thumbnails
+      - ${DATA_ROOT}/cache:/app/cache  # persist export and report caches
+      - ${DATA_ROOT}/secret:/app/secret  # persist flask secret
+      - ${DATA_ROOT}/db:/root/.gramps/grampsdb  # persist Gramps database
+      - ${DATA_ROOT}/media:/app/media  # persist media files
+      - ${DATA_ROOT}/tmp:/tmp
+
+  grampsweb_celery:
+    <<: *grampsweb  # YAML merge key copying the entire grampsweb service config
+    ports: []
+    depends_on:
+      - grampsweb
+      - grampsweb_redis
+    command: celery -A gramps_webapi.celery worker --loglevel=INFO --concurrency=2
+
+  grampsweb_redis:
+    image: docker.io/valkey/valkey:8-alpine
+    restart: always
